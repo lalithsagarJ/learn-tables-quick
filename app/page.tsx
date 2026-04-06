@@ -752,18 +752,15 @@ export default function Page() {
     </main>
   );
 
-  return (
-    <>
-      {screen === 'home' && <HomeScreen />}
-      {screen === 'play' && <PlayScreen />}
-      {screen === 'study' && <StudyScreen />}
-      {screen === 'speed' && <SpeedScreen />}
-      {screen === 'boss' && <BossScreen />}
-      {screen === 'victory' && <VictoryScreen />}
-      {screen === 'gameover' && <GameOverScreen />}
-      {screen === 'certificate' && <CertificateScreen />}
-    </>
-  );
+  if (screen === 'home') return HomeScreen();
+  if (screen === 'play') return PlayScreen();
+  if (screen === 'study') return StudyScreen();
+  if (screen === 'speed') return SpeedScreen();
+  if (screen === 'boss') return BossScreen();
+  if (screen === 'victory') return VictoryScreen();
+  if (screen === 'gameover') return GameOverScreen();
+  if (screen === 'certificate') return CertificateScreen();
+  return HomeScreen();
 }
 
 function HeaderBar({ avatar, playerName, level, score, streak, gems, lives, onHome }: any) {

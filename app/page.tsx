@@ -2,26 +2,25 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crown, RefreshCcw, Rocket, Sparkles, Trophy, Volume2 } from 'lucide-react';
+import {
+  Award,
+  BookOpen,
+  Crown,
+  Gem,
+  Home,
+  Rocket,
+  Shield,
+  Sparkles,
+  Star,
+  Swords,
+  Timer,
+  Trophy,
+  Volume2,
+} from 'lucide-react';
 
-const TABLES = Array.from({ length: 19 }, (_, i) => i + 2);
-const MULTIPLIERS = Array.from({ length: 10 }, (_, i) => i + 1);
-const ENCOURAGEMENT = [
-  'Magic brain move! ✨',
-  'Boom! Correct! 🚀',
-  'You’re on fire! 🔥',
-  'Math queen energy 👑',
-  'Brilliant answer! 🌈',
-  'Super smart! ⭐',
-  'That was lightning fast! ⚡',
-];
-
-const avatars = [
-  { name: 'Star Fox', emoji: '🦊' },
-  { name: 'Moon Cat', emoji: '🐱' },
-  { name: 'Pixel Bunny', emoji: '🐰' },
-  { name: 'Comet Panda', emoji: '🐼' },
-];
+type Screen = 'home' | 'play' | 'study' | 'speed' | 'victory' | 'gameover' | 'boss' | 'certificate';
+type Mode = 'adventure' | 'mission' | 'boss';
+type Theme = 'magic' | 'princess';
 
 type Question = {
   a: number;
@@ -29,6 +28,46 @@ type Question = {
   answer: number;
   choices: number[];
 };
+
+type Avatar = {
+  name: string;
+  emoji: string;
+  title: string;
+};
+
+type SaveState = {
+  playerName: string;
+  avatarIndex: number;
+  mastered: number[];
+  gems: number;
+  streakBest: number;
+  badges: string[];
+  theme: Theme;
+  soundOn: boolean;
+  leaderboard: Array<{ name: string; score: number; mode: string; ts: number }>;
+};
+
+const TABLES = Array.from({ length: 19 }, (_, i) => i + 2);
+const MULTIPLIERS = Array.from({ length: 12 }, (_, i) => i + 1);
+const STORAGE_KEY = 'tables-quest-save-v2';
+const ENCOURAGEMENT = [
+  'Magic blast! ✨',
+  'Perfect hit! 🌟',
+  'Brain sparkle! 💖',
+  'You are unstoppable! 🚀',
+  'Royal math power! 👑',
+  'Excellent! 🎉',
+  'Mega smart move! ⚡',
+];
+
+const AVATARS: Avatar[] = [
+  { name: 'Moon Princess', emoji: '👸', title: 'Royal Learner' },
+  { name: 'Star Unicorn', emoji: '🦄', title: 'Rainbow Rider' },
+  { name: 'Pixel Fairy', emoji: '🧚', title: 'Glow Keeper' },
+  { name: 'Comet Panda', emoji: '🐼', title: 'Cosmic Buddy' },
+  { name: 'Galaxy Cat', emoji: '🐱', title: 'Nebula Ninja' },
+  { name: 'Bunny Knight', emoji: '🐰', title: 'Castle Defender' },
+];
 
 function shuffle<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
@@ -38,23 +77,15 @@ function getRandomQuestion(range = TABLES): Question {
   const a = range[Math.floor(Math.random() * range.length)];
   const b = MULTIPLIERS[Math.floor(Math.random() * MULTIPLIERS.length)];
   const answer = a * b;
+  const deltas = [-10, -7, -5, -3, 3, 4, 6, 8, 10, 12];
   const choices = new Set<number>([answer]);
-  while (choices.size < 4) {
-    const wrong = Math.max(2, answer + Math.floor(Math.random() * 15) - 7);
-    choices.add(wrong);
-  }
-  return { a, b, answer, choices: shuffle(Array.from(choices)) };
-}
 
-function confettiBurst(count = 18) {
-  return Array.from({ length: count }, (_, i) => ({
-    id: i + Math.random(),
-    left: Math.random() * 100,
-    duration: 1.5 + Math.random() * 1.4,
-    delay: Math.random() * 0.2,
-    rotate: Math.random() * 360,
-    emoji: ['✨', '🌟', '💖', '🎉', '🦄', '⚡'][Math.floor(Math.random() * 6)],
-  }));
+  while (choices.size < 4) {
+    const delta = deltas[Math.floor(Math.random() * deltas.length)];
+    choices.add(Math.max(2, answer + delta));
+  }
+
+  return { a, b, answer, choices: shuffle(Array.from(choices)) };
 }
 
 function speakText(text: string) {
@@ -66,20 +97,47 @@ function speakText(text: string) {
   window.speechSynthesis.speak(utter);
 }
 
-function Button({ children, onClick, className = '', variant = 'solid', type = 'button' }: any) {
+function getDefaultSave(): SaveState {
+  return {
+    playerName: 'Math Princess',
+    avatarIndex: 0,
+    mastered: [],
+    gems: 0,
+    streakBest: 0,
+    badges: [],
+    theme: 'princess',
+    soundOn: true,
+    leaderboard: [],
+  };
+}
+
+function burst(count = 20) {
+  const emojis = ['✨', '🌟', '💖', '🎉', '🦄', '👑', '💎'];
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${Date.now()}-${i}-${Math.random()}`,
+    left: Math.random() * 100,
+    duration: 1.6 + Math.random() * 1.6,
+    delay: Math.random() * 0.2,
+    rotate: Math.random() * 360,
+    emoji: emojis[Math.floor(Math.random() * emojis.length)],
+  }));
+}
+
+function Button({ children, onClick, className = '', variant = 'solid', type = 'button', disabled = false }: any) {
   return (
     <button
       type={type}
       onClick={onClick}
-      className={`btn ${variant === 'outline' ? 'btn-outline' : 'btn-solid'} ${className}`}
+      disabled={disabled}
+      className={`btn ${variant === 'outline' ? 'btn-outline' : variant === 'soft' ? 'btn-soft' : 'btn-solid'} ${className}`}
     >
       {children}
     </button>
   );
 }
 
-function Badge({ children }: any) {
-  return <span className="badge">{children}</span>;
+function Badge({ children, className = '' }: any) {
+  return <span className={`badge ${className}`}>{children}</span>;
 }
 
 function Card({ children, className = '' }: any) {
@@ -87,130 +145,257 @@ function Card({ children, className = '' }: any) {
 }
 
 export default function Page() {
-  const [screen, setScreen] = useState('home');
-  const [playerName, setPlayerName] = useState('Math Hero');
-  const [avatar, setAvatar] = useState(avatars[0]);
-  const [selectedTable, setSelectedTable] = useState(2);
-  const [studyIndex, setStudyIndex] = useState(1);
+  const [hydrated, setHydrated] = useState(false);
+  const [screen, setScreen] = useState<Screen>('home');
+  const [theme, setTheme] = useState<Theme>('princess');
+  const [playerName, setPlayerName] = useState('Math Princess');
+  const [avatarIndex, setAvatarIndex] = useState(0);
+  const [soundOn, setSoundOn] = useState(true);
+
   const [question, setQuestion] = useState<Question>(getRandomQuestion());
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
   const [level, setLevel] = useState(1);
-  const [coins, setCoins] = useState(0);
-  const [message, setMessage] = useState('Ready for a math adventure?');
+  const [gems, setGems] = useState(0);
+  const [message, setMessage] = useState('Ready to become a multiplication legend?');
   const [answered, setAnswered] = useState(false);
   const [correctChoice, setCorrectChoice] = useState<number | null>(null);
-  const [gameMode, setGameMode] = useState('adventure');
+  const [gameMode, setGameMode] = useState<Mode>('adventure');
   const [mastered, setMastered] = useState<number[]>([]);
+  const [selectedTable, setSelectedTable] = useState(2);
+  const [studyIndex, setStudyIndex] = useState(1);
   const [inputAnswer, setInputAnswer] = useState('');
-  const [confetti, setConfetti] = useState<any[]>([]);
+  const [speedQuestion, setSpeedQuestion] = useState<Question>(getRandomQuestion());
   const [speedTime, setSpeedTime] = useState(60);
   const [speedScore, setSpeedScore] = useState(0);
-  const [speedQuestion, setSpeedQuestion] = useState<Question>(getRandomQuestion());
   const [speedOver, setSpeedOver] = useState(false);
-  const [soundOn, setSoundOn] = useState(true);
+  const [effects, setEffects] = useState<any[]>([]);
+  const [badges, setBadges] = useState<string[]>([]);
+  const [leaderboard, setLeaderboard] = useState<Array<{ name: string; score: number; mode: string; ts: number }>>([]);
+  const [bossHp, setBossHp] = useState(5);
+  const [certificateScore, setCertificateScore] = useState(0);
 
-  const progressPercent = useMemo(() => Math.min(100, (mastered.length / TABLES.length) * 100), [mastered]);
+  const avatar = AVATARS[avatarIndex];
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const saved = raw ? (JSON.parse(raw) as SaveState) : getDefaultSave();
+      setPlayerName(saved.playerName || 'Math Princess');
+      setAvatarIndex(Number.isInteger(saved.avatarIndex) ? saved.avatarIndex : 0);
+      setMastered(Array.isArray(saved.mastered) ? saved.mastered : []);
+      setGems(saved.gems || 0);
+      setBestStreak(saved.streakBest || 0);
+      setBadges(Array.isArray(saved.badges) ? saved.badges : []);
+      setTheme(saved.theme || 'princess');
+      setSoundOn(saved.soundOn ?? true);
+      setLeaderboard(Array.isArray(saved.leaderboard) ? saved.leaderboard : []);
+    } catch {
+      // ignore malformed local storage
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const payload: SaveState = {
+      playerName,
+      avatarIndex,
+      mastered,
+      gems,
+      streakBest: bestStreak,
+      badges,
+      theme,
+      soundOn,
+      leaderboard,
+    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }, [hydrated, playerName, avatarIndex, mastered, gems, bestStreak, badges, theme, soundOn, leaderboard]);
 
   useEffect(() => {
     if (screen === 'speed' && speedTime > 0 && !speedOver) {
-      const t = setTimeout(() => setSpeedTime((s) => s - 1), 1000);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setSpeedTime((s) => s - 1), 1000);
+      return () => clearTimeout(timer);
     }
-    if (screen === 'speed' && speedTime === 0) setSpeedOver(true);
-  }, [screen, speedTime, speedOver]);
+    if (screen === 'speed' && speedTime === 0) {
+      setSpeedOver(true);
+      addScoreToLeaderboard(speedScore, 'Speed Rocket');
+    }
+  }, [screen, speedTime, speedOver, speedScore]);
 
-  const celebrate = (text: string) => {
+  const progressPercent = useMemo(() => Math.round((mastered.length / TABLES.length) * 100), [mastered]);
+  const nextUnlock = useMemo(() => TABLES.find((t) => !mastered.includes(t)) ?? null, [mastered]);
+  const dailyChallengeTable = useMemo(() => {
+    const seed = new Date().getDate() % TABLES.length;
+    return TABLES[seed];
+  }, []);
+
+  const celebrate = (text: string, count = 20) => {
     setMessage(text);
-    setConfetti(confettiBurst());
-    setTimeout(() => setConfetti([]), 2200);
-    if (soundOn) speakText(text.replace(/[✨🚀🔥👑🌈⭐⚡]/g, ''));
+    setEffects(burst(count));
+    window.setTimeout(() => setEffects([]), 2200);
+    if (soundOn) speakText(text.replace(/[✨🌟💖🎉🦄👑💎🚀⚡]/g, ''));
   };
 
-  const nextQuestion = () => {
-    setAnswered(false);
-    setCorrectChoice(null);
-    const range = gameMode === 'mission' ? [selectedTable] : TABLES;
-    setQuestion(getRandomQuestion(range));
+  const unlockBadge = (badge: string) => {
+    setBadges((prev) => {
+      if (prev.includes(badge)) return prev;
+      celebrate(`New badge unlocked: ${badge}! ✨`, 24);
+      return [...prev, badge];
+    });
   };
 
-  const startAdventure = () => {
-    setGameMode('adventure');
+  const addScoreToLeaderboard = (value: number, mode: string) => {
+    if (value <= 0) return;
+    setLeaderboard((prev) => {
+      const next = [...prev, { name: playerName || 'Math Hero', score: value, mode, ts: Date.now() }]
+        .sort((a, b) => b.score - a.score || b.ts - a.ts)
+        .slice(0, 8);
+      return next;
+    });
+  };
+
+  const resetRound = () => {
     setScore(0);
     setLives(3);
     setStreak(0);
     setLevel(1);
-    setCoins(0);
     setAnswered(false);
     setCorrectChoice(null);
+  };
+
+  const startAdventure = () => {
+    setGameMode('adventure');
+    resetRound();
     setQuestion(getRandomQuestion(TABLES));
-    setMessage('Let’s conquer all the tables!');
+    setMessage('Adventure started. Every answer powers your kingdom!');
     setScreen('play');
   };
 
   const startTableMission = (table: number) => {
     setSelectedTable(table);
     setGameMode('mission');
-    setScore(0);
-    setLives(3);
-    setStreak(0);
-    setLevel(1);
-    setCoins(0);
-    setAnswered(false);
-    setCorrectChoice(null);
+    resetRound();
     setQuestion(getRandomQuestion([table]));
-    setMessage(`Mission Table ${table} started!`);
+    setMessage(`Mission table ${table} started!`);
     setScreen('play');
+  };
+
+  const startBossBattle = () => {
+    const bossTable = nextUnlock ?? selectedTable;
+    setSelectedTable(bossTable);
+    setGameMode('boss');
+    resetRound();
+    setBossHp(5);
+    setQuestion(getRandomQuestion([bossTable]));
+    setMessage(`Boss battle: defeat the Table ${bossTable} Dragon!`);
+    setScreen('boss');
   };
 
   const startSpeedMode = () => {
     setSpeedTime(60);
     setSpeedScore(0);
     setSpeedOver(false);
-    setSpeedQuestion(getRandomQuestion(TABLES));
     setInputAnswer('');
+    setSpeedQuestion(getRandomQuestion(TABLES));
+    setMessage('Speed Rocket launched!');
     setScreen('speed');
+  };
+
+  const openCertificate = () => {
+    setCertificateScore(progressPercent);
+    setScreen('certificate');
+  };
+
+  const nextQuestion = () => {
+    setAnswered(false);
+    setCorrectChoice(null);
+    const range = gameMode === 'mission' || gameMode === 'boss' ? [selectedTable] : TABLES;
+    setQuestion(getRandomQuestion(range));
+  };
+
+  const applyCorrectResult = () => {
+    const newStreak = streak + 1;
+    const newScore = score + 10;
+    const newGems = gems + 5;
+
+    setStreak(newStreak);
+    setBestStreak((prev) => Math.max(prev, newStreak));
+    setScore(newScore);
+    setGems(newGems);
+    celebrate(ENCOURAGEMENT[Math.floor(Math.random() * ENCOURAGEMENT.length)]);
+
+    if (newStreak === 5) unlockBadge('5-in-a-row');
+    if (newStreak === 10) unlockBadge('10-in-a-row');
+    if (newGems >= 100) unlockBadge('100 gems');
+
+    if (newStreak > 0 && newStreak % 5 === 0) {
+      setLevel((l) => l + 1);
+      setGems((g) => g + 20);
+      celebrate('Level up! Magic shield activated! ✨', 28);
+    }
+
+    if (gameMode === 'mission' && newScore >= 100) {
+      if (!mastered.includes(selectedTable)) {
+        setMastered((m) => [...m, selectedTable].sort((a, b) => a - b));
+      }
+      addScoreToLeaderboard(newScore, `Table ${selectedTable} Mission`);
+      unlockBadge(`Mastered ${selectedTable}`);
+      window.setTimeout(() => {
+        setScreen('victory');
+        setMessage(`You mastered table ${selectedTable}!`);
+      }, 900);
+      return true;
+    }
+
+    if (gameMode === 'boss') {
+      const hp = bossHp - 1;
+      setBossHp(hp);
+      if (hp <= 0) {
+        if (!mastered.includes(selectedTable)) {
+          setMastered((m) => [...m, selectedTable].sort((a, b) => a - b));
+        }
+        addScoreToLeaderboard(newScore + 50, `Boss ${selectedTable}`);
+        unlockBadge(`Boss ${selectedTable}`);
+        window.setTimeout(() => {
+          setScreen('victory');
+          setMessage(`Boss defeated! Table ${selectedTable} is now yours!`);
+        }, 900);
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const handleWrong = () => {
+    const nextLives = lives - 1;
+    setLives(nextLives);
+    setStreak(0);
+    setMessage(`Tiny miss. ${question.a} × ${question.b} = ${question.answer}`);
+    if (nextLives <= 0) {
+      addScoreToLeaderboard(score, gameMode === 'boss' ? `Boss ${selectedTable}` : 'Adventure');
+    }
+    return nextLives;
   };
 
   const handleChoice = (choice: number) => {
     if (answered) return;
     setAnswered(true);
     setCorrectChoice(choice);
-    let nextLives = lives;
 
     if (choice === question.answer) {
-      const newStreak = streak + 1;
-      const newScore = score + 10;
-      setStreak(newStreak);
-      setScore(newScore);
-      setCoins((c) => c + 5);
-      celebrate(ENCOURAGEMENT[Math.floor(Math.random() * ENCOURAGEMENT.length)]);
-
-      if (newStreak > 0 && newStreak % 5 === 0) {
-        setLevel((l) => l + 1);
-        setCoins((c) => c + 20);
-        celebrate('Level up! You unlocked more sparkle power! ✨');
-      }
-
-      if (gameMode === 'mission' && newScore >= 100) {
-        if (!mastered.includes(selectedTable)) {
-          setMastered((m) => [...m, selectedTable].sort((a, b) => a - b));
-        }
-        setTimeout(() => {
-          setScreen('victory');
-          setMessage(`You mastered table ${selectedTable}!`);
-        }, 900);
-        return;
-      }
-    } else {
-      nextLives = lives - 1;
-      setLives(nextLives);
-      setStreak(0);
-      setMessage(`Oops! ${question.a} × ${question.b} = ${question.answer}`);
+      const finished = applyCorrectResult();
+      if (finished) return;
+      window.setTimeout(() => nextQuestion(), 1000);
+      return;
     }
 
-    setTimeout(() => {
+    const nextLives = handleWrong();
+    window.setTimeout(() => {
       if (nextLives <= 0) setScreen('gameover');
       else nextQuestion();
     }, 1100);
@@ -219,291 +404,425 @@ export default function Page() {
   const submitSpeedAnswer = () => {
     const value = Number(inputAnswer);
     if (!Number.isFinite(value)) return;
+
     if (value === speedQuestion.answer) {
-      setSpeedScore((s) => s + 1);
-      celebrate('Zoom! Correct! 🚀');
+      setSpeedScore((s) => {
+        const next = s + 1;
+        if (next === 10) unlockBadge('10 speed points');
+        if (next === 20) unlockBadge('20 speed points');
+        return next;
+      });
+      celebrate('Rocket boost! Correct! 🚀', 12);
     } else {
-      setMessage(`Tiny miss! Correct was ${speedQuestion.answer}`);
+      setMessage(`Oops — correct answer was ${speedQuestion.answer}`);
     }
+
     setInputAnswer('');
     setSpeedQuestion(getRandomQuestion(TABLES));
   };
 
   const tableSong = useMemo(
-    () => Array.from({ length: 10 }, (_, i) => `${selectedTable} × ${i + 1} = ${selectedTable * (i + 1)}`),
+    () => Array.from({ length: 12 }, (_, i) => `${selectedTable} × ${i + 1} = ${selectedTable * (i + 1)}`),
     [selectedTable]
   );
 
-  if (screen === 'home') {
-    return (
-      <main className="screen gradient-home">
-        <div className="container">
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="center hero">
-            <h1 className="title">Tables Quest 🌟</h1>
-            <p className="subtitle">Learn multiplication tables from 2 to 20 like a superhero adventure.</p>
-          </motion.div>
+  const themeClass = theme === 'princess' ? 'theme-princess' : 'theme-magic';
 
-          <div className="grid grid-3">
-            <Card>
-              <h2 className="section-title"><Sparkles size={22} /> Player Setup</h2>
-              <label className="label">Hero Name</label>
-              <input className="input" value={playerName} onChange={(e) => setPlayerName(e.target.value)} />
-
-              <div className="label mt">Choose Avatar</div>
-              <div className="grid grid-2">
-                {avatars.map((a) => (
-                  <button
-                    key={a.name}
-                    onClick={() => setAvatar(a)}
-                    className={`avatar-card ${avatar.name === a.name ? 'avatar-active' : ''}`}
-                  >
-                    <div className="avatar-emoji">{a.emoji}</div>
-                    <div className="avatar-name">{a.name}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="row mt">
-                <Button className="grow" onClick={startAdventure}><Rocket size={16} /> Start Adventure</Button>
-                <Button variant="outline" onClick={() => setSoundOn((s) => !s)}><Volume2 size={16} /></Button>
-              </div>
-            </Card>
-
-            <Card className="span-2">
-              <h2 className="section-title"><Trophy size={22} /> Choose Your Mission</h2>
-              <div className="table-grid">
-                {TABLES.map((table) => {
-                  const done = mastered.includes(table);
-                  return (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.98 }}
-                      key={table}
-                      onClick={() => startTableMission(table)}
-                      className={`table-tile ${done ? 'done' : ''}`}
-                    >
-                      <div>Table {table}</div>
-                      <div className="tile-sub">{done ? 'Mastered ✅' : 'Play 🎯'}</div>
-                    </motion.button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-2 mt-lg">
-                <Card className="inner-card blue">
-                  <div className="row spread"><div className="inner-title">Speed Rocket</div><Badge>60 sec</Badge></div>
-                  <p className="muted">Answer as many as you can before the timer hits zero.</p>
-                  <Button onClick={startSpeedMode}>Play Speed Mode ⚡</Button>
-                </Card>
-                <Card className="inner-card pink">
-                  <div className="row spread"><div className="inner-title">Study Castle</div><Badge>Sing & Learn</Badge></div>
-                  <p className="muted">Read one table at a time like a magic chant.</p>
-                  <Button onClick={() => setScreen('study')}>Open Study Mode 📚</Button>
-                </Card>
-              </div>
-
-              <div className="mt-lg">
-                <div className="row spread"><span className="label">Kingdom Progress</span><span className="small-muted">{mastered.length}/19 mastered</span></div>
-                <div className="progress"><div className="progress-fill" style={{ width: `${progressPercent}%` }} /></div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </main>
-    );
+  if (!hydrated) {
+    return <main className={`screen gradient-home ${themeClass}`} />;
   }
 
-  if (screen === 'play') {
-    return (
-      <main className="screen gradient-play">
-        <AnimatePresence>
-          {confetti.map((c) => (
-            <motion.div
-              key={c.id}
-              initial={{ y: -30, opacity: 0, x: 0, rotate: 0 }}
-              animate={{ y: 700, opacity: 1, x: [0, 30, -20, 10], rotate: c.rotate }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: c.duration, delay: c.delay }}
-              className="confetti"
-              style={{ left: `${c.left}%`, top: 0 }}
-            >
-              {c.emoji}
-            </motion.div>
-          ))}
-        </AnimatePresence>
+  const HomeScreen = () => (
+    <main className={`screen gradient-home ${themeClass}`}>
+      <Effects effects={effects} />
+      <div className="container home-shell">
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="center hero">
+          <div className="logo-pill"><Sparkles size={18} /> Tables Quest Deluxe</div>
+          <h1 className="title">Learn Tables Like a Heroine 👑</h1>
+          <p className="subtitle wide">A magical game for learning multiplication tables from 2 to 20 with missions, speed rounds, boss battles, rewards, and a printable certificate vibe.</p>
+        </motion.div>
 
-        <div className="container narrow relative">
-          <div className="row wrap spread gap">
-            <div className="player-pill">
-              <div className="avatar-emoji big">{avatar.emoji}</div>
-              <div>
-                <div className="avatar-name">{playerName}</div>
-                <div className="small-muted">Level {level} Explorer</div>
-              </div>
-            </div>
-            <div className="row wrap gap">
-              <Badge>Score: {score}</Badge>
-              <Badge>Streak: {streak} 🔥</Badge>
-              <Badge>Coins: {coins} 🪙</Badge>
-              <Badge>Lives: {'💖'.repeat(Math.max(0, lives))}</Badge>
-            </div>
-          </div>
+        <div className="grid home-grid">
+          <Card>
+            <h2 className="section-title"><Crown size={22} /> Player Setup</h2>
+            <label className="label">Player Name</label>
+            <input className="input" value={playerName} onChange={(e) => setPlayerName(e.target.value)} />
 
-          <Card className="center huge-card">
-            <motion.div key={`${question.a}-${question.b}`} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="question">
-              {question.a} × {question.b} = ?
-            </motion.div>
-            <div className="message">{message}</div>
-            <div className="answer-grid">
-              {question.choices.map((choice) => {
-                const isCorrect = choice === question.answer;
-                const isChosen = choice === correctChoice;
-                const resultClass = answered ? (isCorrect ? 'correct' : isChosen ? 'wrong' : '') : 'idle';
-                return (
-                  <motion.button
-                    whileHover={!answered ? { scale: 1.03 } : {}}
-                    whileTap={!answered ? { scale: 0.98 } : {}}
-                    key={choice}
-                    onClick={() => handleChoice(choice)}
-                    className={`answer-btn ${resultClass}`}
-                  >
-                    {choice}
-                  </motion.button>
-                );
-              })}
+            <div className="label mt">Choose Theme</div>
+            <div className="row gap wrap">
+              <Button variant={theme === 'princess' ? 'solid' : 'outline'} onClick={() => setTheme('princess')}>Princess ✨</Button>
+              <Button variant={theme === 'magic' ? 'solid' : 'outline'} onClick={() => setTheme('magic')}>Magic Academy 🔮</Button>
             </div>
-            <div className="row center gap mt">
-              <Button variant="outline" onClick={() => setScreen('home')}>Home</Button>
-              <Button onClick={() => speakText(`${question.a} times ${question.b}`)}>Read Question 🔊</Button>
+
+            <div className="label mt">Choose Avatar</div>
+            <div className="grid avatar-grid">
+              {AVATARS.map((item, index) => (
+                <button
+                  key={item.name}
+                  onClick={() => setAvatarIndex(index)}
+                  className={`avatar-card ${avatarIndex === index ? 'avatar-active' : ''}`}
+                >
+                  <div className="avatar-emoji">{item.emoji}</div>
+                  <div className="avatar-name">{item.name}</div>
+                  <div className="avatar-sub">{item.title}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="row gap wrap mt-lg">
+              <Button className="grow" onClick={startAdventure}><Rocket size={18} /> Start Adventure</Button>
+              <Button variant="outline" onClick={() => setSoundOn((s) => !s)}><Volume2 size={18} /> {soundOn ? 'Sound On' : 'Sound Off'}</Button>
             </div>
           </Card>
-        </div>
-      </main>
-    );
-  }
-
-  if (screen === 'study') {
-    return (
-      <main className="screen gradient-study">
-        <div className="container">
-          <div className="row wrap spread gap">
-            <h2 className="title-sm">Study Castle 📚</h2>
-            <Button onClick={() => setScreen('home')}>Back Home</Button>
-          </div>
 
           <Card>
-            <div className="table-grid study-grid">
-              {TABLES.map((t) => (
-                <Button key={t} variant={selectedTable === t ? 'solid' : 'outline'} onClick={() => { setSelectedTable(t); setStudyIndex(1); }}>
-                  Table {t}
-                </Button>
-              ))}
+            <h2 className="section-title"><Trophy size={22} /> Missions & Modes</h2>
+            <div className="stats-grid">
+              <StatCard icon={<Gem size={18} />} label="Gems" value={gems} />
+              <StatCard icon={<Star size={18} />} label="Best Streak" value={bestStreak} />
+              <StatCard icon={<Award size={18} />} label="Badges" value={badges.length} />
+              <StatCard icon={<Shield size={18} />} label="Mastered" value={`${mastered.length}/19`} />
             </div>
 
-            <motion.div key={`${selectedTable}-${studyIndex}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="study-hero">
-              <div className="muted">Magic line</div>
-              <div className="study-line">{selectedTable} × {studyIndex} = {selectedTable * studyIndex}</div>
-            </motion.div>
-
-            <div className="row center gap mt">
-              <Button variant="outline" onClick={() => setStudyIndex((i) => Math.max(1, i - 1))}>Previous</Button>
-              <Button onClick={() => speakText(`${selectedTable} times ${studyIndex} equals ${selectedTable * studyIndex}`)}>Speak 🔊</Button>
-              <Button onClick={() => setStudyIndex((i) => Math.min(10, i + 1))}>Next</Button>
+            <div className="mode-grid mt-lg">
+              <MiniModeCard title="Speed Rocket" note="60 seconds" action="Play" onClick={startSpeedMode} icon={<Timer size={18} />} />
+              <MiniModeCard title="Study Castle" note="Read and repeat" action="Open" onClick={() => setScreen('study')} icon={<BookOpen size={18} />} />
+              <MiniModeCard title="Boss Battle" note={`Fight table ${nextUnlock ?? selectedTable}`} action="Fight" onClick={startBossBattle} icon={<Swords size={18} />} />
+              <MiniModeCard title="Certificate" note="Celebrate progress" action="View" onClick={openCertificate} icon={<Award size={18} />} />
             </div>
 
-            <div className="grid song-grid mt-lg">
-              {tableSong.map((line, idx) => (
-                <motion.div key={line} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.03 }} className="song-tile">
-                  {line}
-                </motion.div>
-              ))}
+            <div className="mt-lg">
+              <div className="row spread"><span className="label">Kingdom Progress</span><span className="small-muted">{progressPercent}% complete</span></div>
+              <div className="progress"><div className="progress-fill" style={{ width: `${progressPercent}%` }} /></div>
+              <div className="small-muted mt">Daily challenge: Master table {dailyChallengeTable} today 🌟</div>
             </div>
           </Card>
         </div>
-      </main>
-    );
-  }
 
-  if (screen === 'speed') {
-    return (
-      <main className="screen gradient-speed">
-        <div className="container speed-narrow">
-          <div className="row wrap spread gap">
-            <h2 className="title-sm">Speed Rocket ⚡</h2>
-            <div className="row gap"><Badge>Time: {speedTime}s</Badge><Badge>Score: {speedScore}</Badge></div>
+        <Card className="mt-lg">
+          <div className="row spread wrap gap">
+            <h2 className="section-title no-margin"><Sparkles size={22} /> Choose a Table Mission</h2>
+            <div className="row gap wrap">
+              {badges.slice(0, 4).map((badge) => <Badge key={badge}>{badge}</Badge>)}
+            </div>
+          </div>
+          <div className="table-grid mission-grid mt">
+            {TABLES.map((table) => {
+              const done = mastered.includes(table);
+              return (
+                <motion.button
+                  key={table}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => startTableMission(table)}
+                  className={`table-tile ${done ? 'done' : ''}`}
+                >
+                  <div>Table {table}</div>
+                  <div className="tile-sub">{done ? 'Mastered ✅' : 'Play mission 🎯'}</div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </Card>
+
+        <div className="grid bottom-grid mt-lg">
+          <Card>
+            <h2 className="section-title"><Award size={22} /> Hall of Fame</h2>
+            <div className="list-stack">
+              {leaderboard.length === 0 ? <div className="small-muted">No scores yet. Start a mission and own the board.</div> : leaderboard.map((row, idx) => (
+                <div key={`${row.ts}-${idx}`} className="score-row">
+                  <div><strong>#{idx + 1}</strong> {row.name}</div>
+                  <div>{row.score} pts · {row.mode}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="section-title"><Star size={22} /> Your Buddy</h2>
+            <div className="buddy-card">
+              <div className="buddy-emoji">{avatar.emoji}</div>
+              <div>
+                <div className="avatar-name">{avatar.name}</div>
+                <div className="small-muted">{avatar.title}</div>
+              </div>
+            </div>
+            <div className="message-box mt">Tip: say each answer out loud. That makes the pattern stick faster.</div>
+          </Card>
+        </div>
+      </div>
+    </main>
+  );
+
+  const PlayScreen = () => (
+    <main className={`screen gradient-play ${themeClass}`}>
+      <Effects effects={effects} />
+      <div className="container narrow relative">
+        <HeaderBar avatar={avatar} playerName={playerName} level={level} score={score} streak={streak} gems={gems} lives={lives} onHome={() => setScreen('home')} />
+
+        <Card className="huge-card center">
+          <div className="question">{question.a} × {question.b} = ?</div>
+          <div className="message">{message}</div>
+
+          <div className="answer-grid">
+            {question.choices.map((choice) => {
+              const isCorrect = choice === question.answer;
+              const isChosen = choice === correctChoice;
+              const variant = answered ? (isCorrect ? 'correct' : isChosen ? 'wrong' : '') : 'idle';
+              return (
+                <motion.button
+                  key={choice}
+                  whileHover={!answered ? { scale: 1.02 } : {}}
+                  whileTap={!answered ? { scale: 0.98 } : {}}
+                  onClick={() => handleChoice(choice)}
+                  className={`answer-btn ${variant}`}
+                >
+                  {choice}
+                </motion.button>
+              );
+            })}
           </div>
 
-          <Card className="center huge-card">
-            {!speedOver ? (
-              <>
-                <motion.div key={`${speedQuestion.a}-${speedQuestion.b}`} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="question">
-                  {speedQuestion.a} × {speedQuestion.b} = ?
-                </motion.div>
-                <div className="speed-row">
-                  <input
-                    className="input big-input"
-                    value={inputAnswer}
-                    onChange={(e) => setInputAnswer(e.target.value.replace(/[^0-9]/g, ''))}
-                    onKeyDown={(e) => e.key === 'Enter' && submitSpeedAnswer()}
-                    placeholder="Type answer"
-                  />
-                  <Button className="tall" onClick={submitSpeedAnswer}>Go</Button>
-                </div>
-                <div className="muted">Fast fingers. Fast brain. Full rocket mode.</div>
-              </>
-            ) : (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="center">
-                <div className="emoji-xl">🏁</div>
-                <div className="title-sm">Mission Complete!</div>
-                <div className="subtitle">You solved {speedScore} questions in 60 seconds.</div>
-                <div className="row center gap mt">
-                  <Button onClick={startSpeedMode}><RefreshCcw size={16} /> Play Again</Button>
-                  <Button variant="outline" onClick={() => setScreen('home')}>Home</Button>
-                </div>
-              </motion.div>
-            )}
-          </Card>
-        </div>
-      </main>
-    );
-  }
-
-  if (screen === 'victory') {
-    return (
-      <main className="screen gradient-victory">
-        <div className="container speed-narrow">
-          <Card className="center huge-card">
-            <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 1.8 }} className="emoji-xl">👑</motion.div>
-            <div className="title-sm">Table {selectedTable} Mastered!</div>
-            <div className="subtitle">{playerName}, you completed this table like a true math queen.</div>
-            <div className="row wrap center gap mt">
-              <Badge>+100 wisdom</Badge>
-              <Badge>+sparkle badge</Badge>
-              <Badge>kingdom unlocked</Badge>
-            </div>
-            <div className="row center gap mt">
-              <Button onClick={() => startTableMission(selectedTable)}>Play Again</Button>
-              <Button variant="outline" onClick={() => setScreen('home')}>Home</Button>
-            </div>
-          </Card>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="screen gradient-gameover">
-      <div className="container speed-narrow">
-        <Card className="center huge-card">
-          <div className="emoji-xl">💫</div>
-          <div className="title-sm">Nice Try, Hero!</div>
-          <div className="subtitle">Even legends miss a few. Ready for another round?</div>
-          <div className="row center gap mt">
-            <Button onClick={() => (gameMode === 'mission' ? startTableMission(selectedTable) : startAdventure())}>Try Again</Button>
-            <Button variant="outline" onClick={() => setScreen('home')}>Home</Button>
+          <div className="row gap wrap center-row mt-lg">
+            <Button variant="outline" onClick={() => setScreen('home')}><Home size={18} /> Home</Button>
+            <Button variant="soft" onClick={() => speakText(`${question.a} times ${question.b}`)}><Volume2 size={18} /> Read Question</Button>
           </div>
         </Card>
       </div>
     </main>
+  );
+
+  const StudyScreen = () => (
+    <main className={`screen gradient-study ${themeClass}`}>
+      <div className="container relative">
+        <div className="row spread wrap gap"><h2 className="title-sm">Study Castle 📚</h2><Button onClick={() => setScreen('home')}><Home size={18} /> Home</Button></div>
+        <Card>
+          <div className="table-grid study-grid">
+            {TABLES.map((table) => (
+              <Button key={table} variant={selectedTable === table ? 'solid' : 'outline'} onClick={() => { setSelectedTable(table); setStudyIndex(1); }}>
+                Table {table}
+              </Button>
+            ))}
+          </div>
+
+          <motion.div key={`${selectedTable}-${studyIndex}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="study-hero">
+            <div className="small-muted">Magic line</div>
+            <div className="study-line">{selectedTable} × {studyIndex} = {selectedTable * studyIndex}</div>
+          </motion.div>
+
+          <div className="row gap wrap center-row mt-lg">
+            <Button variant="outline" onClick={() => setStudyIndex((i) => Math.max(1, i - 1))}>Previous</Button>
+            <Button onClick={() => speakText(`${selectedTable} times ${studyIndex} equals ${selectedTable * studyIndex}`)}><Volume2 size={18} /> Speak</Button>
+            <Button variant="outline" onClick={() => setStudyIndex((i) => Math.min(12, i + 1))}>Next</Button>
+          </div>
+
+          <div className="song-grid mt-lg">
+            {tableSong.map((line, idx) => (
+              <motion.div key={line} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.03 }} className="song-tile">
+                {line}
+              </motion.div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+
+  const SpeedScreen = () => (
+    <main className={`screen gradient-speed ${themeClass}`}>
+      <Effects effects={effects} />
+      <div className="container speed-narrow relative">
+        <div className="row spread wrap gap"><h2 className="title-sm">Speed Rocket ⚡</h2><div className="row gap wrap"><Badge>Time: {speedTime}s</Badge><Badge>Score: {speedScore}</Badge></div></div>
+        <Card className="huge-card center">
+          {!speedOver ? (
+            <>
+              <motion.div key={`${speedQuestion.a}-${speedQuestion.b}`} initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} className="question">
+                {speedQuestion.a} × {speedQuestion.b} = ?
+              </motion.div>
+              <div className="speed-row">
+                <input
+                  className="input big-input"
+                  value={inputAnswer}
+                  onChange={(e) => setInputAnswer(e.target.value.replace(/[^0-9]/g, ''))}
+                  onKeyDown={(e) => e.key === 'Enter' && submitSpeedAnswer()}
+                  placeholder="Type answer"
+                />
+                <Button className="tall" onClick={submitSpeedAnswer}>Go 🚀</Button>
+              </div>
+              <div className="small-muted">Fast fingers. Fast brain. Full rocket mode.</div>
+            </>
+          ) : (
+            <div>
+              <div className="emoji-xl">🏁</div>
+              <div className="title-sm">Mission Complete!</div>
+              <div className="message">You solved {speedScore} questions in 60 seconds.</div>
+              <div className="row gap wrap center-row mt-lg">
+                <Button onClick={startSpeedMode}>Play Again</Button>
+                <Button variant="outline" onClick={() => setScreen('home')}><Home size={18} /> Home</Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    </main>
+  );
+
+  const BossScreen = () => (
+    <main className={`screen gradient-play ${themeClass}`}>
+      <Effects effects={effects} />
+      <div className="container narrow relative">
+        <HeaderBar avatar={avatar} playerName={playerName} level={level} score={score} streak={streak} gems={gems} lives={lives} onHome={() => setScreen('home')} />
+        <Card className="huge-card center boss-card">
+          <div className="boss-emoji">🐉</div>
+          <div className="title-sm">Table {selectedTable} Dragon</div>
+          <div className="message">Boss HP: {'❤️'.repeat(Math.max(0, bossHp))}</div>
+          <div className="question">{question.a} × {question.b} = ?</div>
+          <div className="answer-grid">
+            {question.choices.map((choice) => {
+              const isCorrect = choice === question.answer;
+              const isChosen = choice === correctChoice;
+              const variant = answered ? (isCorrect ? 'correct' : isChosen ? 'wrong' : '') : 'idle';
+              return (
+                <button key={choice} onClick={() => handleChoice(choice)} className={`answer-btn ${variant}`}>
+                  {choice}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+
+  const VictoryScreen = () => (
+    <main className={`screen gradient-victory ${themeClass}`}>
+      <div className="container speed-narrow">
+        <Card className="huge-card center">
+          <div className="emoji-xl">👑</div>
+          <div className="title-sm">Victory!</div>
+          <div className="message">{message}</div>
+          <div className="row gap wrap center-row">
+            <Badge>+ Gems</Badge>
+            <Badge>+ Badge chance</Badge>
+            <Badge>+ Progress</Badge>
+          </div>
+          <div className="row gap wrap center-row mt-lg">
+            <Button onClick={() => startTableMission(selectedTable)}>Play Again</Button>
+            <Button variant="outline" onClick={() => setScreen('home')}><Home size={18} /> Home</Button>
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+
+  const GameOverScreen = () => (
+    <main className={`screen gradient-gameover ${themeClass}`}>
+      <div className="container speed-narrow">
+        <Card className="huge-card center">
+          <div className="emoji-xl">💫</div>
+          <div className="title-sm">Nice Try, Hero!</div>
+          <div className="message">Every legend misses sometimes. One more round?</div>
+          <div className="row gap wrap center-row mt-lg">
+            <Button onClick={() => gameMode === 'boss' ? startBossBattle() : gameMode === 'mission' ? startTableMission(selectedTable) : startAdventure()}>
+              Try Again
+            </Button>
+            <Button variant="outline" onClick={() => setScreen('home')}><Home size={18} /> Home</Button>
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+
+  const CertificateScreen = () => (
+    <main className={`screen gradient-victory ${themeClass}`}>
+      <div className="container speed-narrow">
+        <Card className="certificate-card">
+          <div className="certificate-star">🏆</div>
+          <div className="certificate-title">Certificate of Math Bravery</div>
+          <div className="certificate-name">{playerName}</div>
+          <div className="certificate-text">has courageously learned multiplication tables and reached</div>
+          <div className="certificate-score">{certificateScore}% kingdom progress</div>
+          <div className="certificate-text">Mastered Tables: {mastered.length ? mastered.join(', ') : 'Just beginning the adventure'}</div>
+          <div className="row gap wrap center-row mt-lg">
+            <Button onClick={() => window.print()}>Print</Button>
+            <Button variant="outline" onClick={() => setScreen('home')}><Home size={18} /> Home</Button>
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+
+  return (
+    <>
+      {screen === 'home' && <HomeScreen />}
+      {screen === 'play' && <PlayScreen />}
+      {screen === 'study' && <StudyScreen />}
+      {screen === 'speed' && <SpeedScreen />}
+      {screen === 'boss' && <BossScreen />}
+      {screen === 'victory' && <VictoryScreen />}
+      {screen === 'gameover' && <GameOverScreen />}
+      {screen === 'certificate' && <CertificateScreen />}
+    </>
+  );
+}
+
+function HeaderBar({ avatar, playerName, level, score, streak, gems, lives, onHome }: any) {
+  return (
+    <div className="row spread wrap gap header-stack">
+      <div className="player-pill">
+        <div className="avatar-emoji big">{avatar.emoji}</div>
+        <div>
+          <div className="avatar-name">{playerName}</div>
+          <div className="small-muted">Level {level} Explorer</div>
+        </div>
+      </div>
+      <div className="row gap wrap">
+        <Badge>Score: {score}</Badge>
+        <Badge>Streak: {streak} 🔥</Badge>
+        <Badge>Gems: {gems} 💎</Badge>
+        <Badge>Lives: {'💖'.repeat(Math.max(0, lives))}</Badge>
+        <Button variant="outline" onClick={onHome}><Home size={18} /> Home</Button>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value }: any) {
+  return (
+    <div className="stat-card">
+      <div className="stat-icon">{icon}</div>
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{value}</div>
+    </div>
+  );
+}
+
+function MiniModeCard({ title, note, action, onClick, icon }: any) {
+  return (
+    <div className="mini-card">
+      <div className="row spread gap"><strong>{title}</strong><span className="mini-icon">{icon}</span></div>
+      <div className="small-muted mt">{note}</div>
+      <Button className="mt-lg" onClick={onClick}>{action}</Button>
+    </div>
+  );
+}
+
+function Effects({ effects }: { effects: any[] }) {
+  return (
+    <AnimatePresence>
+      {effects.map((effect) => (
+        <motion.div
+          key={effect.id}
+          initial={{ y: -30, opacity: 0, x: 0, rotate: 0 }}
+          animate={{ y: 720, opacity: 1, x: [0, 30, -20, 10], rotate: effect.rotate }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: effect.duration, delay: effect.delay }}
+          className="confetti"
+          style={{ left: `${effect.left}%`, top: 0 }}
+        >
+          {effect.emoji}
+        </motion.div>
+      ))}
+    </AnimatePresence>
   );
 }
